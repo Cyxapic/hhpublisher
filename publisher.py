@@ -55,9 +55,10 @@ def main():
         'stop': publisher.stop,
         'restart': publisher.restart,
     }
-    command = DAEMON_METHODS.get(get_publisher_args())
+    arg = get_publisher_args()
+    command = DAEMON_METHODS.get(arg)
     if command:
-        print("Starting daemon ... To stop use publisher.py stop")
+        print(f"{arg.title()}ing daemon ... To help use publisher.py -h")
         command()
     else:
         print("Don't know command!")

@@ -102,10 +102,9 @@ class Daemon:
         except IOError:
             pid = None
         if not pid:
-            message = "pidfile %s does not exist. Daemon not running?\n"
-            message = """pidfile {self.pidfile} already exist.
-                       Daemon already running?\n"""
-            logging.critical(message.format(self.pidfile))
+            message = f"""pidfile {self.pidfile} already exist.
+                          Daemon already running?\n"""
+            logging.critical(message)
             return # not an error in a restart
 
         # Try killing the daemon process

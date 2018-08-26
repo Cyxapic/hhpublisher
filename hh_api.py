@@ -2,6 +2,7 @@ import os
 import platform
 import argparse
 import json
+import getpass
 
 import requests
 
@@ -16,10 +17,26 @@ class DataAPI:
 
     def _create_settings(self):
         print("Сначала созданим настройки!")
-        token = input('Введите токе HH API: ')
-        resume_id = input('Введите ID резюме HH: ')
-        data = {'token': token,
-                'resume_id': resume_id}
+        TOKEN = input('Введите токе HH API: ')
+        RESUME_ID = input('Введите ID резюме HH: ')
+        SENDMAIL = input('Отправлять на почту уведомления? y/n: ')
+        SENDMAIL = 'Y' if SENDMAIL.upper() == 'Y' else 'N'
+        data = {'TOKEN': TOKEN,
+                'RESUME_ID': RESUME_ID,
+                'SENDMAIL': SENDMAIL,}
+        if SENDMAIL == 'Y':
+            MAIL_HOST = input('Введите host (прим. smtp.yandex.ru): ')
+            EMAIL_PORT = input('Введите port (прим. 587): ')
+            EMAIL_HOST_USER = input('Введите user (прим. test@yandex.ru): ')
+            EMAIL_HOST_PASSWORD = getpass.getpass()
+            EMAIL = input('Введите куда отправяем (прим. to_test@yandex.ru): ')
+            data.update({
+                    'MAIL_HOST': MAIL_HOST,
+                    'EMAIL_PORT': EMAIL_PORT,
+                    'EMAIL_HOST_USER': EMAIL_HOST_USER,
+                    'EMAIL_HOST_PASSWORD': EMAIL_HOST_PASSWORD,
+                    'EMAIL': EMAIL,
+                })
         with open(self.settings_path, 'w') as file:
             json.dump(data, file)
 
@@ -40,14 +57,20 @@ class Resume:
     def __init__(self, data_api=None):
         '''
         data_api = {
-            'token': 'TOKEN',
-            'resume_id' 'RESUME_ID'
+            'TOKEN': 'TOKEN',
+            'RESUME_ID': 'RESUME_ID',
+            'SENDMAIL': 'Y'/'N',
         }
         '''
         if not data_api:
             exit('No data HH API')
-        self.URL = f"https://api.hh.ru/resumes/{data_api['resume_id']}/publish"
-        self.HEADERS = {"Authorization": f"Bearer {data_api['token']}"}
+        self.data_api = data_api
+        self.URL = f"https://api.hh.ru/resumes/{data_api['RESUME_ID']}/publish"
+        self.HEADERS = {"Authorization": f"Bearer {data_api['TOKEN']}"}
+
+    def send_request(self):
+        r = requests.post(self.URL, headers=self.HEADERS)
+        self._send_notify(*self.MESSAGES.get(r.status_code, 500))
 
     def _send_notify(self, title, message):
         msg = {
@@ -55,8 +78,25 @@ class Resume:
             'Darwin': f"""osascript -e 'display notification "{message}"
                          with title "{title}"' """,
         }
-        os.system(msg[platform.system()])
+        if self.data_api['SENDMAIL'] == 'Y':
+            self._email_notify(title, message)
+        else:
+            os.system(msg[platform.system()])
 
-    def send_request(self):
-        r = requests.post(self.URL, headers=self.HEADERS)
-        self._send_notify(*self.MESSAGES.get(r.status_code, 500))
+    def _email_notify(self, title, message):
+        msg = (
+            f'From: {self.data_api["EMAIL_HOST_USER"]}\n'
+            f'To: {self.data_api["EMAIL"]}\n'
+            'Content-Type: text/html; charset="utf-8"\n'
+            f'Subject: {title}\n'
+            f'{message}'
+        )
+        host = self.data_api['MAIL_HOST']
+        port = self.data_api['EMAIL_PORT']
+        with smtplib.SMTP(host, port) as server:
+            server.starttls()
+            server.login(self.data_api['EMAIL_HOST_USER'],
+                         self.data_api['EMAIL_HOST_PASSWORD'])
+            server.sendmail(self.data_api['EMAIL_HOST_USER'],
+                            self.data_api['EMAIL'],
+                            msg)
